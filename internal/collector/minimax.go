@@ -122,7 +122,13 @@ func scanStatsFiles() *LocalStats {
 			continue
 		}
 
-		dateStr := entry.Name()[6:14] // stats_YYYYMMDD.jsonl
+			if len(entry.Name()) < 14 {
+			continue
+		}
+		dateStr := entry.Name()[6:14]
+		if _, err := time.Parse("20060102", dateStr); err != nil {
+			continue // skip invalid date filenames
+		}
 		dayCalls := 0
 		dayInputTokens := int64(0)
 		dayOutputTokens := int64(0)
@@ -286,20 +292,22 @@ func getTokenPlanUsage() []TokenPlanItem {
 }
 
 func getAPIKey() string {
-	settingsPath := os.ExpandEnv("~/.claude/settings.json")
+	// Try MiniMax API key from minimax relevant settings first
+	settingsPath := os.ExpandEnv("~/.openclaw/settings.json")
 	data, err := os.ReadFile(settingsPath)
-	if err != nil {
-		return ""
+	if err == nil {
+		var settings struct {
+			APIKey string `json:"MINIMAX_API_KEY"`
+		}
+		if json.Unmarshal(data, &settings) == nil && settings.APIKey != "" {
+			return settings.APIKey
+		}
 	}
 
-	var settings struct {
-		Env struct {
-			APIKey string `json:"ANTHROPIC_API_KEY"`
-		} `json:"env"`
-	}
-	if err := json.Unmarshal(data, &settings); err != nil {
-		return ""
+	// Fallback: check env variable
+	if apiKey := os.Getenv("MINIMAX_API_KEY"); apiKey != "" {
+		return apiKey
 	}
 
-	return settings.Env.APIKey
+	return ""
 }

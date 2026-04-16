@@ -1,7 +1,6 @@
 package collector
 
 import (
-	"encoding/json"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -16,13 +15,15 @@ type ExternalMetrics struct {
 }
 
 type HermesInfo struct {
-	Version    string       `json:"version"`
-	Python     string       `json:"python"`
-	Project    string       `json:"project"`
-	Model      string       `json:"model"`
-	Provider   string       `json:"provider"`
-	Gateway    GatewayInfo `json:"gateway"`
-	Uptime     UptimeInfo   `json:"uptime"`
+	Version        string      `json:"version"`
+	Python         string      `json:"python"`
+	Project        string      `json:"project"`
+	Model          string      `json:"model"`
+	Provider       string      `json:"provider"`
+	GatewayStatus  string      `json:"gateway_status"`
+	GatewayPID     int         `json:"gateway_pid,omitempty"`
+	Gateway        GatewayInfo `json:"gateway"`
+	Uptime         UptimeInfo  `json:"uptime"`
 }
 
 type GatewayInfo struct {
@@ -59,32 +60,34 @@ func CollectExternal() (*ExternalMetrics, error) {
 func getHermesInfo() HermesInfo {
 	info := HermesInfo{}
 
-	// 检查 hermes 命令
+	// Version
 	result := runCommand("hermes", "--version")
 	if result.Output != "" {
-		info.Version = strings.TrimSpace(result.Output)
+		lines := strings.Split(result.Output, "\n")
+		info.Version = strings.TrimSpace(lines[0])
 	}
 
-	result = runCommand("hermes", "status", "--json")
+	// Parse plain text status output
+	result = runCommand("hermes", "status")
 	if result.Output != "" {
-		var status struct {
-			Version string `json:"version"`
-			Python  string `json:"python"`
-			Project string `json:"project"`
-			Model   string `json:"model"`
-			Provider string `json:"provider"`
-		}
-		if json.Unmarshal([]byte(result.Output), &status) == nil {
-			info.Version = status.Version
-			info.Python = status.Python
-			info.Project = status.Project
-			info.Model = status.Model
-			info.Provider = status.Provider
+		for _, line := range strings.Split(result.Output, "\n") {
+			if strings.HasPrefix(line, "  Project:") {
+				info.Project = strings.TrimSpace(strings.TrimPrefix(line, "  Project:"))
+			} else if strings.HasPrefix(line, "  Python:") {
+				info.Python = strings.TrimSpace(strings.TrimPrefix(line, "  Python:"))
+			} else if strings.HasPrefix(line, "  Model:") {
+				info.Model = strings.TrimSpace(strings.TrimPrefix(line, "  Model:"))
+			} else if strings.HasPrefix(line, "  Provider:") {
+				info.Provider = strings.TrimSpace(strings.TrimPrefix(line, "  Provider:"))
+			}
 		}
 	}
 
-	// 检查 Hermes Gateway
-	info.Gateway = getHermesGateway()
+	// Gateway
+	gw := getHermesGateway()
+	info.Gateway = gw
+	info.GatewayStatus = gw.Status
+	info.GatewayPID = gw.PID
 
 	return info
 }
@@ -92,21 +95,19 @@ func getHermesInfo() HermesInfo {
 func getHermesGateway() GatewayInfo {
 	gateway := GatewayInfo{Status: "stopped"}
 
-	// 使用 pgrep 查找 hermes gateway 进程
-	result := runCommand("pgrep", "-f", "hermes gateway run")
-	if result.Output == "" || result.Error != nil {
-		return gateway
+	// Check via systemctl
+	result := runCommand("systemctl", "--user", "is-active", "hermes-gateway")
+	if strings.TrimSpace(result.Output) == "active" {
+		gateway.Status = "running"
 	}
 
-	pidStr := strings.TrimSpace(result.Output)
-	pid, err := strconv.Atoi(pidStr)
-	if err != nil {
-		return gateway
+	// Get PID from systemctl
+	result = runCommand("systemctl", "--user", "show", "hermes-gateway", "--property=MainPID", "--value")
+	if result.Error == nil {
+		if pid, err := strconv.Atoi(strings.TrimSpace(result.Output)); err == nil && pid > 0 {
+			gateway.PID = pid
+		}
 	}
-
-	gateway.PID = pid
-	gateway.Status = "running"
-	gateway.PID = pid
 
 	return gateway
 }

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -100,15 +101,21 @@ func (s *Storage) initTables() error {
 
 // SaveSystemMetrics 保存系统资源数据
 func (s *Storage) SaveSystemMetrics(data *SystemMetricsData) error {
-	cpuPerCoreJSON, _ := json.Marshal(data.CPUPerCore)
-	diskUsageJSON, _ := json.Marshal(data.DiskUsage)
-
 	query := `INSERT INTO system_metrics 
 		(timestamp, cpu_percent, cpu_per_core, memory_percent, memory_total, memory_used, 
 		disk_usage, network_bytes_sent, network_bytes_recv, process_count, uptime_seconds)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	_, err := s.db.Exec(query,
+	cpuPerCoreJSON, err := json.Marshal(data.CPUPerCore)
+	if err != nil {
+		return fmt.Errorf("marshal cpu per core: %w", err)
+	}
+	diskUsageJSON, err := json.Marshal(data.DiskUsage)
+	if err != nil {
+		return fmt.Errorf("marshal disk usage: %w", err)
+	}
+
+	_, err = s.db.Exec(query,
 		data.Timestamp,
 		data.CPUPercent,
 		string(cpuPerCoreJSON),
@@ -187,6 +194,7 @@ func (s *Storage) GetSystemHistory(hours, limit int) ([]map[string]interface{}, 
 		var memoryUsed, processCount, uptimeSeconds int
 
 		if err := rows.Scan(&timestamp, &cpuPercent, &memoryPercent, &memoryUsed, &processCount, &uptimeSeconds); err != nil {
+			log.Printf("scan row error: %v", err)
 			continue
 		}
 

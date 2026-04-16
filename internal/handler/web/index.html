@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClawMonitor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1724; color: #e2e8f0; min-height: 100vh; }
+        
+        /* Header */
+        .header { background: linear-gradient(135deg, #1e293b 0%, #0f1724 100%); padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; }
+        .header h1 { color: #38bdf8; font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .header-right { display: flex; align-items: center; gap: 16px; }
+        .last-update { color: #64748b; font-size: 13px; }
+        .refresh-btn { background: #1e293b; color: #38bdf8; border: 1px solid #38bdf8; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+        .refresh-btn:hover { background: #38bdf8; color: #0f1724; }
+        .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* Tabs */
+        .tabs { background: #1e293b; display: flex; padding: 0 24px; gap: 4px; border-bottom: 1px solid #334155; }
+        .tab { padding: 14px 20px; cursor: pointer; color: #94a3b8; border-bottom: 2px solid transparent; transition: all 0.2s; font-size: 14px; font-weight: 500; }
+        .tab:hover { color: #38bdf8; }
+        .tab.active { color: #38bdf8; border-bottom-color: #38bdf8; }
+        
+        /* Content */
+        .content { padding: 24px; display: none; }
+        .content.active { display: block; }
+        
+        /* Cards - Glass Effect (Semi-transparent) */
+        .card { background: rgba(30, 41, 59, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+        .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; }
+        .card.glass-card, .stat-card.glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #334155; }
+        .card-title { color: #38bdf8; font-size: 15px; font-weight: 600; }
+        .card-badge { background: #334155; color: #94a3b8; padding: 4px 10px; border-radius: 12px; font-size: 12px; }
+        
+        /* Stat Grid */
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .stat-card { background: rgba(30, 41, 59, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 20px; text-align: center; transition: transform 0.2s, border-color 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); border-color: rgba(56, 189, 248, 0.6); }
+        .stat-card.glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+
+        /* Glass card variants */
+        .card-glass { background: rgba(30, 41, 59, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+        .quota-card { background: rgba(30, 41, 59, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 14px; }
+        .overview-card { background: rgba(30, 41, 59, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 14px 10px; text-align: center; }
+        .oc-stat { background: rgba(30, 41, 59, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 12px; text-align: center; }
+        .oc-header { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+        .item-card { background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 14px; transition: all 0.2s; }
+        .model-chip { background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px; }
+        .oc-gateway-icon { background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; }
+        .stat-icon { font-size: 28px; margin-bottom: 8px; }
+        .stat-value { font-size: 26px; font-weight: 700; color: #f8fafc; margin: 8px 0; }
+        .stat-label { color: #64748b; font-size: 13px; }
+        .stat-value.danger { color: #ef4444; }
+        .stat-value.warning { color: #f59e0b; }
+        .stat-value.success { color: #22c55e; }
+        
+        /* Card Grid */
+        .card-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        
+        /* Compact System Info */
+        .oc-sys-compact {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 4px;
+            align-items: center;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .oc-sys-item { color: #94a3b8; }
+        .oc-sys-sep { color: #475569; }
+        
+        /* Quota Card Grid */
+        .quota-card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .quota-card {
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 14px;
+        }
+        .quota-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .quota-card-title {
+            font-weight: 600;
+            color: #e2e8f0;
+            font-size: 13px;
+        }
+        .quota-card-pct {
+            font-weight: 700;
+            font-size: 14px;
+        }
+        .quota-card-pct.danger { color: #ef4444; }
+        .quota-card-pct.warning { color: #f59e0b; }
+        .quota-card-pct.success { color: #22c55e; }
+        .quota-card-progress {
+            background: #334155;
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .quota-card-progress-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+        .quota-card-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #64748b;
+        }
+        .quota-card-reset {
+            font-size: 11px;
+            color: #475569;
+            margin-top: 6px;
+            text-align: right;
+        }
+        
+        /* Skill Tag Grid */
+        .skill-tag-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .skill-tag {
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 11px;
+            color: #94a3b8;
+            cursor: default;
+        }
+        .skill-tag:hover {
+            border-color: #22c55e;
+            color: #e2e8f0;
+        }
+        .skill-tag-local {
+            border-color: #3b82f6;
+        }
+        .skill-tag-local:hover {
+            border-color: #3b82f6;
+        }
+        
+        /* Overview Card Grid */
+        .overview-card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+        }
+        .overview-card {
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 14px 10px;
+            text-align: center;
+        }
+        .overview-card.ok { border-color: #065f46; }
+        .overview-card.err { border-color: #7f1d1d; }
+        .overview-card-icon {
+            font-size: 20px;
+            margin-bottom: 6px;
+        }
+        .overview-card-label {
+            font-size: 11px;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+        .overview-card-value {
+            font-size: 16px;
+            font-weight: 700;
+            color: #38bdf8;
+        }
+        .overview-card-value.danger { color: #ef4444; }
+        .overview-card-value.success { color: #22c55e; }
+        
+        /* OpenClaw Header */
+        .oc-header {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        .oc-gateway-card {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .oc-gateway-icon {
+            width: 56px;
+            height: 56px;
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+        }
+        .oc-gateway-icon.running { background: rgba(6, 78, 59, 0.8); border-color: rgba(34, 197, 94, 0.3); }
+        .oc-gateway-icon.stopped { background: rgba(127, 29, 29, 0.8); border-color: rgba(239, 68, 68, 0.3); }
+        .oc-gateway-info { flex: 1; }
+        .oc-gateway-status {
+            font-size: 20px;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+        .oc-gateway-sub {
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+        .oc-stats-row {
+            display: flex;
+            gap: 12px;
+        }
+        .oc-stat {
+            flex: 1;
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 12px;
+            text-align: center;
+        }
+        .oc-stat-value {
+            font-size: 22px;
+            font-weight: 700;
+            color: #38bdf8;
+        }
+        .oc-stat-label {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+        
+        /* Extension/Skill Cards */
+        .item-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 14px;
+            transition: all 0.2s;
+        }
+        .item-card:hover {
+            border-color: #38bdf8;
+            transform: translateY(-2px);
+        }
+        .item-card-name {
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .item-card-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #1e293b;
+            color: #64748b;
+        }
+        .item-card-desc {
+            font-size: 12px;
+            color: #94a3b8;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .item-card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 12px;
+        }
+        
+        /* Metric List */
+        .metric-list { display: flex; flex-direction: column; gap: 12px; }
+        .metric { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #334155; }
+        .metric:last-child { border-bottom: none; }
+        .metric-label { color: #94a3b8; font-size: 14px; }
+        .metric-value { font-weight: 600; color: #f8fafc; font-size: 14px; }
+        .metric-value.danger { color: #ef4444; }
+        .metric-value.warning { color: #f59e0b; }
+        .metric-value.success { color: #22c55e; }
+        
+        /* Progress Bar */
+        .progress-wrap { margin-top: 8px; }
+        .progress-bar { background: #334155; height: 8px; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #38bdf8; border-radius: 4px; transition: width 0.5s ease; }
+        .progress-fill.danger { background: #ef4444; }
+        .progress-fill.warning { background: #f59e0b; }
+        .progress-fill.success { background: #22c55e; }
+        
+        /* Loading */
+        .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; color: #64748b; background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; }
+        .spinner { width: 40px; height: 40px; border: 3px solid #334155; border-top-color: #38bdf8; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .skeleton { background: linear-gradient(90deg, rgba(51, 65, 85, 0.6) 25%, rgba(71, 85, 105, 0.6) 50%, rgba(51, 65, 85, 0.6) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
+        .empty-state { text-align: center; padding: 30px 20px; color: #64748b; font-size: 14px; background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(8px); border-radius: 8px; border: 1px dashed rgba(255,255,255,0.1); }
+        .empty-state-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.5; }
+        .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; color: #64748b; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .skeleton-text { height: 16px; width: 60%; margin: 8px 0; }
+        .skeleton-line { height: 12px; width: 100%; margin: 6px 0; }
+        .error-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; color: #ef4444; font-size: 13px; text-align: center; }
+        .error-state .retry-btn { margin-top: 12px; background: #1e293b; color: #38bdf8; border: 1px solid #38bdf8; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+        .skeleton-card { background: rgba(30, 41, 59, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 20px; }
+        .skeleton-stat { background: linear-gradient(90deg, rgba(51, 65, 85, 0.8) 25%, rgba(71, 85, 105, 0.8) 50%, rgba(51, 65, 85, 0.8) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 8px; height: 100px; border: 1px solid rgba(255, 255, 255, 0.05); }
+        
+        /* Status Indicator */
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+        .status-dot.green { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+        .status-dot.red { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        .status-dot.yellow { background: #f59e0b; }
+        
+        /* Mini Model Grid */
+        .model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 12px; }
+        .model-chip {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .model-chip-name { color: #38bdf8; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+        .model-chip-info { color: #64748b; font-size: 12px; }
+
+        /* Plugin Tags */
+        .plugin-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .plugin-tag {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #94a3b8;
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 13px;
+            position: relative;
+            cursor: default;
+        }
+        
+        /* Tooltip */
+        .tooltip { position: relative; display: inline-block; cursor: pointer; }
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            background: #1e293b;
+            color: #e2e8f0;
+            text-align: left;
+            border-radius: 8px;
+            padding: 10px 12px;
+            position: absolute;
+            z-index: 100;
+            bottom: 120%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 280px;
+            font-size: 12px;
+            line-height: 1.5;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            border: 1px solid #334155;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .tooltip .tooltip-text::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -6px;
+            border-width: 6px;
+            border-style: solid;
+            border-color: #1e293b transparent transparent transparent;
+        }
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        .tooltip-text em { color: #64748b; }
+        .tooltip-text small { color: #64748b; display: block; margin-top: 4px; }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .stat-grid { grid-template-columns: repeat(2, 1fr); }
+            .header { flex-direction: column; gap: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🐾 ClawMonitor</h1>
+        <div class="header-right">
+            <span class="last-update">更新: <span id="lastUpdate">-</span></span>
+            <button class="refresh-btn" id="refreshBtn" onclick="refresh()">🔄 刷新</button>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" data-tab="overview">📊 总览</div>
+        <div class="tab" data-tab="system">🖥️ 系统</div>
+        <div class="tab" data-tab="openclaw">⚡ OpenClaw</div>
+        <div class="tab" data-tab="minimax">🤖 MiniMax</div>
+        <div class="tab" data-tab="claude">🧠 Claude Code</div>
+        <div class="tab" data-tab="hermes">🔮 Hermes</div>
+    </div>
+
+    <!-- 总览 -->
+    <div id="tab-overview" class="content active">
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-icon">🖥️</div>
+                <div class="stat-value" id="ov-cpu">--</div>
+                <div class="stat-label">CPU 使用率</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">💾</div>
+                <div class="stat-value" id="ov-mem">--</div>
+                <div class="stat-label">内存使用率</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-value" id="ov-gw">--</div>
+                <div class="stat-label">Gateway</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">💰</div>
+                <div class="stat-value" id="ov-cost">--</div>
+                <div class="stat-label">本月成本</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🧠</div>
+                <div class="stat-value" id="ov-cc">--</div>
+                <div class="stat-label">Claude Code</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔮</div>
+                <div class="stat-value" id="ov-hermes">--</div>
+                <div class="stat-label">Hermes</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">⚡ OpenClaw</span>
+                <span class="card-badge" id="ov-oc-badge">--</span>
+            </div>
+            <div id="overview-oc"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">🤖 MiniMax 配额</span>
+                <span class="card-badge" id="ov-mm-badge">--</span>
+            </div>
+            <div id="overview-quota"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        </div>
+    </div>
+
+    <!-- 系统 -->
+    <div id="tab-system" class="content">
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-value" id="sys-cpu-val">--</div>
+                <div class="stat-label">CPU</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">💾</div>
+                <div class="stat-value" id="sys-mem-val">--</div>
+                <div class="stat-label">内存</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📈</div>
+                <div class="stat-value" id="sys-load">--</div>
+                <div class="stat-label">负载</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⏱️</div>
+                <div class="stat-value" id="sys-uptime">--</div>
+                <div class="stat-label">运行时长</div>
+            </div>
+        </div>
+        
+        <div class="card-grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">CPU 详情</span>
+                </div>
+                <div id="sys-cpu-detail"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">内存详情</span>
+                </div>
+                <div id="sys-mem-detail"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">磁盘</span>
+            </div>
+            <div id="sys-disk"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        </div>
+    </div>
+
+    <!-- OpenClaw -->
+    <div id="tab-openclaw" class="content">
+        <div class="oc-header">
+            <div class="oc-gateway-card">
+                <div class="oc-gateway-icon" id="oc-gateway-icon">⚡</div>
+                <div class="oc-gateway-info">
+                    <div class="oc-gateway-status" id="oc-gateway-status">检测中...</div>
+                    <div class="oc-gateway-sub">Gateway <span id="oc-gateway-pid"></span></div>
+                </div>
+            </div>
+            <div class="oc-stats-row">
+                <div class="oc-stat">
+                    <div class="oc-stat-value" id="oc-agents">--</div>
+                    <div class="oc-stat-label">Agent</div>
+                </div>
+                <div class="oc-stat">
+                    <div class="oc-stat-value" id="oc-sessions">--</div>
+                    <div class="oc-stat-label">会话</div>
+                </div>
+                <div class="oc-stat">
+                    <div class="oc-stat-value" id="oc-models-count">--</div>
+                    <div class="oc-stat-label">模型</div>
+                </div>
+                <div class="oc-stat">
+                    <div class="oc-stat-value" id="oc-skills">--</div>
+                    <div class="oc-stat-label">技能</div>
+                </div>
+                <div class="oc-stat">
+                    <div class="oc-stat-value" id="oc-plugins">--</div>
+                    <div class="oc-stat-label">扩展</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card-grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">🖥️ 系统信息</span>
+                </div>
+                <div id="oc-system-info"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">🤖 模型配置</span>
+                </div>
+                <div id="oc-default-model"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">🔌 已配置模型</span>
+                <span class="card-badge" id="oc-models-badge">--</span>
+            </div>
+            <div id="oc-models"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">📦 已安装扩展</span>
+                <span class="card-badge" id="oc-extensions-badge">--</span>
+            </div>
+            <div id="oc-extensions-detail"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">🛠️ 已安装技能</span>
+                <span class="card-badge" id="oc-skills-badge">--</span>
+            </div>
+            <div id="oc-skills-detail"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        </div>
+    </div>
+
+    <!-- MiniMax -->
+    <div id="tab-minimax" class="content">
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-value" id="mm-total-calls">--</div>
+                <div class="stat-label">总调用</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-value" id="mm-tokens">--</div>
+                <div class="stat-label">Tokens</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">💰</div>
+                <div class="stat-value warning" id="mm-cost">--</div>
+                <div class="stat-label">估算成本</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📅</div>
+                <div class="stat-value" id="mm-today">--</div>
+                <div class="stat-label">今日调用</div>
+            </div>
+        </div>
+        
+        <div class="card-header">
+            <span class="card-title">📦 Token Plan 配额</span>
+        </div>
+        <div id="mm-quota" class="quota-card-grid"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        
+        <div class="card-header" style="margin-top: 20px;">
+            <span class="card-title">🤖 按模型统计</span>
+        </div>
+        <div id="mm-by-model" class="quota-card-grid"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+    </div>
+
+    <!-- Claude Code -->
+    <div id="tab-claude" class="content">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">🧠 Claude Code 状态</span>
+                <span class="card-badge" id="cc-badge">--</span>
+            </div>
+            <div id="cc-info"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">⚙️ 配置信息</span>
+            </div>
+            <div id="cc-config"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">📁 项目列表</span>
+            </div>
+            <div id="cc-projects"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        </div>
+    </div>
+
+    <!-- Hermes -->
+    <div id="tab-hermes" class="content">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">🔮 Hermes Agent 状态</span>
+                <span class="card-badge" id="hermes-badge">--</span>
+            </div>
+            <div id="hermes-info"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">🛠️ 技能列表</span>
+            </div>
+            <div id="hermes-apikeys"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">💬 消息平台</span>
+            </div>
+            <div id="hermes-messaging"><div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let isLoading = false;
+        
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+            });
+        });
+        
+        function fetchWithTimeout(url, ms = 10000) {
+            return new Promise((resolve) => {
+                const timeout = setTimeout(() => resolve(null), ms);
+                fetch(url)
+                    .then(response => { clearTimeout(timeout); resolve(response); })
+                    .catch(() => { clearTimeout(timeout); resolve(null); });
+            });
+        }
+
+        async function retryFetch(url, retries = 2, delay = 2000, timeout = 10000) {
+            for (let i = 0; i <= retries; i++) {
+                const response = await fetchWithTimeout(url, timeout);
+                if (response && response.ok) {
+                    try { const data = await response.json(); return data; }
+                    catch { if (i < retries) await new Promise(r => setTimeout(r, delay)); continue; }
+                } else if (response && !response.ok) {
+                    try { const data = await response.json(); return data; }
+                    catch { if (i < retries) await new Promise(r => setTimeout(r, delay)); continue; }
+                } else { if (i < retries) await new Promise(r => setTimeout(r, delay)); }
+            }
+            return null;
+        }
+
+        function showSkeletonLayout() {
+            const sk = '<div class="skeleton-card"><div class="skeleton" style="height:14px;width:40%;margin-bottom:16px;"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div></div>';
+            const ids = ['overview-oc','overview-quota','sys-cpu-detail','sys-mem-detail','sys-disk','oc-system-info','oc-default-model','oc-models','oc-extensions-detail','oc-skills-detail','mm-quota','mm-by-model','cc-info','cc-config','cc-projects','hermes-info','hermes-apikeys','hermes-messaging'];
+            ids.forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = sk; });
+        }
+
+        function showErrorState(el, msg) {
+            el.innerHTML = '<div class="error-state">' + (msg || '加载失败') + '<button class="retry-btn" onclick="refresh()">重试</button></div>';
+        }
+
+        function showEmptyState(el, msg, icon = '📭') {
+            el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">' + icon + '</div><div>' + (msg || '暂无数据') + '</div></div>';
+        }
+
+        // Map section IDs to contextual empty state messages
+        const emptyStateConfig = {
+            'overview-oc': { msg: 'OpenClaw 未运行', icon: '⚡' },
+            'overview-quota': { msg: '暂无配额数据', icon: '💰' },
+            'sys-cpu-detail': { msg: '暂无 CPU 数据', icon: '🖥️' },
+            'sys-mem-detail': { msg: '暂无内存数据', icon: '💾' },
+            'sys-disk': { msg: '暂无磁盘数据', icon: '📊' },
+            'oc-system-info': { msg: '暂无系统信息', icon: '🖥️' },
+            'oc-default-model': { msg: '暂无模型配置', icon: '🤖' },
+            'oc-models': { msg: '暂无已配置模型', icon: '🤖' },
+            'oc-extensions-detail': { msg: '暂无已安装扩展', icon: '📦' },
+            'oc-skills-detail': { msg: '暂无已安装技能', icon: '🛠️' },
+            'mm-quota': { msg: '暂无 Token Plan 配额', icon: '📊' },
+            'mm-by-model': { msg: '暂无按模型统计', icon: '🤖' },
+            'cc-info': { msg: 'Claude Code 未运行', icon: '🧠' },
+            'cc-config': { msg: '暂无配置信息', icon: '⚙️' },
+            'cc-projects': { msg: '暂无项目列表', icon: '📁' },
+            'hermes-info': { msg: 'Hermes 未运行', icon: '🔮' },
+            'hermes-apikeys': { msg: '暂无技能列表', icon: '🛠️' },
+            'hermes-messaging': { msg: '暂无消息平台配置', icon: '💬' }
+        };
+
+        // Ensure all skeleton sections get proper empty state after update
+        function finalizeSections() {
+            const ids = ['overview-oc','overview-quota','sys-cpu-detail','sys-mem-detail','sys-disk',
+                         'oc-system-info','oc-default-model','oc-models','oc-extensions-detail','oc-skills-detail',
+                         'mm-quota','mm-by-model','cc-info','cc-config','cc-projects',
+                         'hermes-info','hermes-apikeys','hermes-messaging'];
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    // Replace skeleton cards with empty states
+                    if (el.querySelector('.skeleton-card')) {
+                        const config = emptyStateConfig[id] || {};
+                        showEmptyState(el, config.msg, config.icon);
+                    }
+                    // Also handle case where innerHTML was set but to nothing useful (empty string or just whitespace)
+                    if (el.innerHTML.trim() === '') {
+                        const config = emptyStateConfig[id] || {};
+                        showEmptyState(el, config.msg, config.icon);
+                    }
+                }
+            });
+        }
+
+        async function refresh() {
+            if (isLoading) return;
+            isLoading = true;
+            document.getElementById('refreshBtn').disabled = true;
+            showSkeletonLayout();
+            try {
+                const start = Date.now();
+                const data = await retryFetch(`${API_BASE}/status`, 2, 2000, 10000);
+                const elapsed = Date.now() - start;
+                console.log(`API 响应时间: ${elapsed}ms`);
+                if (data === null) {
+                    console.error('获取数据失败');
+                    ['overview-oc','overview-quota','sys-cpu-detail','sys-mem-detail','sys-disk','oc-system-info','oc-default-model','oc-models','oc-extensions-detail','oc-skills-detail','mm-quota','mm-by-model','cc-info','cc-config','cc-projects','hermes-info','hermes-apikeys','hermes-messaging'].forEach(id => showErrorState(document.getElementById(id), '获取数据失败，请重试'));
+                    return;
+                }
+                updateUI(data);
+                finalizeSections(); // Ensure any unfilled sections show empty state
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+            } finally {
+                isLoading = false;
+                document.getElementById('refreshBtn').disabled = false;
+            }
+        }
+        
+        function getColorClass(val, warn = 70, danger = 90) {
+            if (val >= danger) return 'danger';
+            if (val >= warn) return 'warning';
+            return 'success';
+        }
+        
+        function updateUI(data) {
+            const sys = data.system || {};
+            const oc = data.openclaw || {};
+            const mm = data.minimax || {};
+            
+            // ===== Overview =====
+            const cpuPct = sys.cpu?.usage_percent || 0;
+            const memPct = sys.memory?.percent || 0;
+            const gwRunning = oc.gateway?.running;
+            
+            setStat('ov-cpu', cpuPct.toFixed(1) + '%', getColorClass(cpuPct));
+            setStat('ov-mem', memPct.toFixed(1) + '%', getColorClass(memPct));
+            setStat('ov-gw', gwRunning ? '运行中' : '已停止', gwRunning ? 'success' : 'danger');
+            setStat('ov-cost', '¥' + (mm.total?.estimated_cost || 0).toFixed(4));
+            
+            // External agents overview
+            const cc = data.external?.claude_code || {};
+            const hermes = data.external?.hermes || {};
+            setStat('ov-cc', cc.model || cc.version || '--', cc.model ? '' : 'warning');
+            const hermesStatus = hermes.gateway_status === 'running' ? '运行中' : (hermes.version || '未知');
+            setStat('ov-hermes', hermesStatus, hermes.gateway_status === 'running' ? 'success' : 'warning');
+            
+            // Overview OC - Card Grid
+            if (oc.gateway !== undefined) {
+                document.getElementById('ov-oc-badge').textContent = gwRunning ? '在线' : '离线';
+                document.getElementById('overview-oc').innerHTML = `
+                    <div class="overview-card-grid">
+                        <div class="overview-card ${gwRunning ? 'ok' : 'err'}">
+                            <div class="overview-card-icon">${gwRunning ? '⚡' : '⚠️'}</div>
+                            <div class="overview-card-label">Gateway</div>
+                            <div class="overview-card-value ${gwRunning ? 'success' : 'danger'}">${gwRunning ? '运行中' : '已停止'}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">🤖</div>
+                            <div class="overview-card-label">模型</div>
+                            <div class="overview-card-value">${oc.config?.models_count || 0}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">🛠️</div>
+                            <div class="overview-card-label">技能</div>
+                            <div class="overview-card-value">${oc.skills?.count || 0}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">📦</div>
+                            <div class="overview-card-label">扩展</div>
+                            <div class="overview-card-value">${oc.extensions?.count || 0}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">💬</div>
+                            <div class="overview-card-label">会话</div>
+                            <div class="overview-card-value">${oc.sessions?.count || 0}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Overview Quota - Card Grid
+            if (mm.token_plan && mm.token_plan.length > 0) {
+                document.getElementById('ov-mm-badge').textContent = mm.token_plan.length + ' 个模型';
+                document.getElementById('overview-quota').innerHTML = `
+                    <div class="overview-card-grid">
+                        ${mm.token_plan.slice(0, 6).map(item => {
+                            const total = item.current_interval_total_count || 0;
+                            const remains = item.current_interval_usage_count || 0;
+                            const used = total - remains;
+                            const pct = total > 0 ? (used / total * 100).toFixed(0) : 0;
+                            const cls = getColorClass(Number(pct));
+                            return `
+                                <div class="overview-card">
+                                    <div class="overview-card-icon">📊</div>
+                                    <div class="overview-card-label">${item.model_name.length > 15 ? item.model_name.slice(0,15)+'...' : item.model_name}</div>
+                                    <div class="overview-card-value ${cls}">${pct}%</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+            
+            // ===== System =====
+            setStat('sys-cpu-val', cpuPct.toFixed(1) + '%', getColorClass(cpuPct));
+            setStat('sys-mem-val', memPct.toFixed(1) + '%', getColorClass(memPct));
+            
+            const loadAvg = sys.cpu?.load_avg || {};
+            setStat('sys-load', loadAvg['1min']?.toFixed(2) || '--');
+            
+            if (sys.uptime) {
+                const days = Math.floor(sys.uptime / 86400);
+                const hours = Math.floor((sys.uptime % 86400) / 3600);
+                setStat('sys-uptime', days > 0 ? `${days}d ${hours}h` : `${hours}h`);
+            }
+            
+            // CPU Detail - Card Grid
+            if (sys.cpu) {
+                const perCpu = sys.cpu.per_cpu || [];
+                document.getElementById('sys-cpu-detail').innerHTML = `
+                    <div class="overview-card-grid" style="margin-bottom: 16px;">
+                        <div class="overview-card">
+                            <div class="overview-card-icon">🧠</div>
+                            <div class="overview-card-label">逻辑核心</div>
+                            <div class="overview-card-value">${sys.cpu.count_logical}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">⚙️</div>
+                            <div class="overview-card-label">物理核心</div>
+                            <div class="overview-card-value">${sys.cpu.count_physical}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">📊</div>
+                            <div class="overview-card-label">负载 (1分)</div>
+                            <div class="overview-card-value">${loadAvg['1min']?.toFixed(2)}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">📈</div>
+                            <div class="overview-card-label">负载 (5分)</div>
+                            <div class="overview-card-value">${loadAvg['5min']?.toFixed(2)}</div>
+                        </div>
+                    </div>
+                    <div class="model-grid">
+                        ${perCpu.map((p, i) => `
+                            <div class="model-chip">
+                                <div class="model-chip-name">核心 ${i}</div>
+                                <div class="progress-wrap">
+                                    <div class="progress-bar"><div class="progress-fill ${getColorClass(p)}" style="width: ${p}%"></div></div>
+                                </div>
+                                <div class="model-chip-info" style="margin-top:4px">${p.toFixed(1)}%</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Memory Detail - Card Grid
+            if (sys.memory) {
+                document.getElementById('sys-mem-detail').innerHTML = `
+                    <div class="overview-card-grid" style="margin-bottom: 16px;">
+                        <div class="overview-card">
+                            <div class="overview-card-icon">💾</div>
+                            <div class="overview-card-label">总内存</div>
+                            <div class="overview-card-value">${sys.memory.total_gb} GB</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">📦</div>
+                            <div class="overview-card-label">已使用</div>
+                            <div class="overview-card-value">${sys.memory.used_gb} GB</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">✨</div>
+                            <div class="overview-card-label">可用</div>
+                            <div class="overview-card-value">${sys.memory.available_gb} GB</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">📊</div>
+                            <div class="overview-card-label">使用率</div>
+                            <div class="overview-card-value ${getColorClass(memPct)}">${memPct.toFixed(1)}%</div>
+                        </div>
+                    </div>
+                    <div class="progress-wrap">
+                        <div class="progress-bar"><div class="progress-fill ${getColorClass(memPct)}" style="width: ${memPct}%"></div></div>
+                    </div>
+                `;
+            }
+            
+            // Disk - Card Grid
+            if (sys.disk && sys.disk.length > 0) {
+                document.getElementById('sys-disk').innerHTML = `
+                    <div class="quota-card-grid">
+                        ${sys.disk.map(d => `
+                            <div class="quota-card">
+                                <div class="quota-card-header">
+                                    <span class="quota-card-title">${d.mountpoint}</span>
+                                    <span class="quota-card-pct ${getColorClass(d.percent, 80, 90)}">${d.percent.toFixed(1)}%</span>
+                                </div>
+                                <div class="quota-card-progress">
+                                    <div class="quota-card-progress-fill ${getColorClass(d.percent, 80, 90)}" style="width: ${d.percent}%"></div>
+                                </div>
+                                <div class="quota-card-stats">
+                                    <span>已用 ${d.used_gb} GB</span>
+                                    <span>总共 ${d.total_gb} GB</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // ===== OpenClaw =====
+            // Gateway Header
+            const gwIcon = document.getElementById('oc-gateway-icon');
+            const gwStatus = document.getElementById('oc-gateway-status');
+            if (gwRunning) {
+                gwIcon.textContent = '⚡';
+                gwIcon.className = 'oc-gateway-icon running';
+                gwStatus.textContent = 'Gateway 运行中';
+                gwStatus.style.color = '#22c55e';
+            } else {
+                gwIcon.textContent = '⚠️';
+                gwIcon.className = 'oc-gateway-icon stopped';
+                gwStatus.textContent = 'Gateway 已停止';
+                gwStatus.style.color = '#ef4444';
+            }
+            const gwPidEl = document.getElementById('oc-gateway-pid');
+            if (oc.gateway?.pid) {
+                const uptimeStr = oc.gateway.uptime_str ? ` | 运行: ${oc.gateway.uptime_str}` : '';
+                gwPidEl.textContent = `PID: ${oc.gateway.pid}${uptimeStr}`;
+            } else {
+                gwPidEl.textContent = '';
+            }
+            
+            setStat('oc-agents', oc.config?.agents_count || 0);
+            setStat('oc-sessions', oc.sessions?.count || 0);
+            setStat('oc-plugins', oc.extensions?.count || 0);
+            setStat('oc-skills', oc.skills?.count || 0);
+            setStat('oc-models-count', oc.config?.models_count || 0);
+            
+            // System Info - Compact
+            const runtime = oc.runtime || {};
+            const memory = oc.memory || {};
+            if (runtime.os) {
+                document.getElementById('oc-system-info').innerHTML = `
+                    <div class="oc-sys-compact">
+                        <span class="oc-sys-item">${runtime.os}</span>
+                        <span class="oc-sys-sep">•</span>
+                        <span class="oc-sys-item">${runtime.python}</span>
+                        <span class="oc-sys-sep">•</span>
+                        <span class="oc-sys-item">${runtime.node}</span>
+                        <span class="oc-sys-sep">•</span>
+                        <span class="oc-sys-item">${runtime.arch}</span>
+                        <span class="oc-sys-sep">•</span>
+                        <span class="oc-sys-item">${runtime.hostname}</span>
+                        <span class="oc-sys-sep">•</span>
+                        <span class="oc-sys-item">内存 ${memory.rss_mb || '--'}MB</span>
+                        <span class="oc-sys-sep">•</span>
+                        <span class="oc-sys-item">配置 ${oc.config?.version || '--'}</span>
+                    </div>
+                `;
+            }
+            
+            // Default Model
+            if (oc.config) {
+                const defaultModel = oc.config.defaultModel || '';
+                const fallbacks = oc.config.fallbackModels || [];
+                document.getElementById('oc-default-model').innerHTML = `
+                    <div class="metric-list">
+                        <div class="metric">
+                            <span class="metric-label">主模型</span>
+                            <span class="metric-value" style="color: #38bdf8">${defaultModel}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">备用模型</span>
+                            <span class="metric-value">${fallbacks.length > 0 ? fallbacks.join(' → ') : '无'}</span>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Models - Compact Cards
+            if (oc.config && oc.config.models) {
+                document.getElementById('oc-models-badge').textContent = oc.config.models.length + ' 个模型';
+                document.getElementById('oc-models').innerHTML = `
+                    <div class="quota-card-grid">
+                        ${oc.config.models.map(m => `
+                            <div class="quota-card">
+                                <div class="quota-card-header">
+                                    <span class="quota-card-title">${m.name}</span>
+                                    ${m.reasoning ? '<span style="color:#f59e0b">⚡</span>' : ''}
+                                </div>
+                                <div class="quota-card-stats">
+                                    <span>${m.provider}</span>
+                                    <span>上下文 ${(m.contextWindow / 1000).toFixed(0)}K</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Extensions as Cards with Tooltip
+            if (oc.extensions && oc.extensions.extensions) {
+                document.getElementById('oc-extensions-badge').textContent = oc.extensions.count + ' 个扩展';
+                document.getElementById('oc-extensions-detail').innerHTML = `
+                    <div class="item-card-grid">
+                        ${oc.extensions.extensions.map(p => `
+                            <div class="item-card tooltip">
+                                <div class="item-card-name">🔌 ${p.name}</div>
+                                <div class="item-card-desc">${p.zh_description || p.description || '无描述'}</div>
+                                <span class="tooltip-text">
+                                    <strong>${p.name}</strong>
+                                    <br><span style="color:#38bdf8">${p.zh_description || '无中文描述'}</span>
+                                    ${p.description ? '<br><small style="color:#64748b">' + p.description + '</small>' : ''}
+                                </span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Skills as Cards with Tooltip
+            if (oc.skills && oc.skills.skills) {
+                const skills = oc.skills.skills;
+                document.getElementById('oc-skills-badge').textContent = `${oc.skills.workspace_count} 工作区 + ${oc.skills.global_count} 全局`;
+                document.getElementById('oc-skills-detail').innerHTML = `
+                    <div class="item-card-grid">
+                        ${skills.map(s => `
+                            <div class="item-card tooltip">
+                                <div class="item-card-name">
+                                    🛠️ ${s.name}
+                                    <span class="item-card-badge">${s.location}</span>
+                                </div>
+                                <div class="item-card-desc">${s.zh_description || s.description || '暂无描述'}</div>
+                                <span class="tooltip-text">
+                                    <strong>${s.name}</strong>
+                                    <br><span style="color:#38bdf8">${s.zh_description || '暂无中文描述'}</span>
+                                    ${s.description ? '<br><small style="color:#64748b">' + s.description + '</small>' : ''}
+                                    <br><small>位置: ${s.location}</small>
+                                </span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // ===== MiniMax =====
+            setStat('mm-total-calls', (mm.total?.calls || 0).toLocaleString());
+            setStat('mm-tokens', ((mm.total?.input_tokens || 0) + (mm.total?.output_tokens || 0)).toLocaleString());
+            setStat('mm-cost', '¥' + (mm.total?.estimated_cost || 0).toFixed(4));
+            setStat('mm-today', (mm.today?.calls || 0).toLocaleString());
+            
+            if (mm.token_plan && mm.token_plan.length > 0) {
+                document.getElementById('mm-quota').innerHTML = mm.token_plan.map(item => {
+                    const total = item.current_interval_total_count || 0;
+                    const remains = item.current_interval_usage_count || 0;
+                    const used = total - remains;
+                    const pct = total > 0 ? (used / total * 100).toFixed(1) : 0;
+                    const cls = getColorClass(Number(pct));
+                    const resetTime = item.reset_time || '--';
+                    const resetIn = item.reset_in || '--';
+                    return `
+                        <div class="quota-card">
+                            <div class="quota-card-header">
+                                <span class="quota-card-title">${item.model_name}</span>
+                                <span class="quota-card-pct ${cls}">${pct}%</span>
+                            </div>
+                            <div class="quota-card-progress">
+                                <div class="quota-card-progress-fill ${cls}" style="width: ${pct}%"></div>
+                            </div>
+                            <div class="quota-card-stats">
+                                <span>已用 ${used.toLocaleString()}</span>
+                                <span>剩余 ${remains.toLocaleString()}</span>
+                            </div>
+                            <div class="quota-card-reset">
+                                ⏰ ${resetTime} (${resetIn})
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            if (mm.by_model && Object.keys(mm.by_model).length > 0) {
+                document.getElementById('mm-by-model').innerHTML = `
+                    <div class="quota-card-grid">
+                        ${Object.entries(mm.by_model).map(([name, stats]) => `
+                            <div class="quota-card">
+                                <div class="quota-card-header">
+                                    <span class="quota-card-title">${name}</span>
+                                </div>
+                                <div class="quota-card-stats">
+                                    <span>调用 ${stats.calls} 次</span>
+                                    <span>¥${(stats.estimated_cost || 0).toFixed(4)}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                document.getElementById('mm-by-model').innerHTML = '<div class="empty-state">暂无按模型统计数据</div>';
+            }
+            
+            // ===== Claude Code =====
+            if (cc.version) {
+                document.getElementById('cc-badge').textContent = cc.version;
+                document.getElementById('cc-info').innerHTML = `
+                    <div class="overview-card-grid">
+                        <div class="overview-card">
+                            <div class="overview-card-icon">🧠</div>
+                            <div class="overview-card-label">版本</div>
+                            <div class="overview-card-value">${cc.version}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">🤖</div>
+                            <div class="overview-card-label">模型</div>
+                            <div class="overview-card-value">${cc.model || '未设置'}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">📁</div>
+                            <div class="overview-card-label">项目数</div>
+                            <div class="overview-card-value">${cc.projects_count || 0}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">💬</div>
+                            <div class="overview-card-label">会话数</div>
+                            <div class="overview-card-value">${cc.sessions_count || 0}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (cc.config) {
+                const cfg = cc.config;
+                document.getElementById('cc-config').innerHTML = `
+                    <div class="quota-card-grid">
+                        ${Object.entries(cfg).filter(([k,v]) => v).map(([key, val]) => `
+                            <div class="quota-card">
+                                <div class="quota-card-header">
+                                    <span class="quota-card-title">${key}</span>
+                                </div>
+                                <div class="quota-card-stats">
+                                    <span>${val}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            if (cc.projects && cc.projects.length > 0) {
+                document.getElementById('cc-projects').innerHTML = `
+                    <div class="quota-card-grid">
+                        ${cc.projects.map(p => `
+                            <div class="quota-card">
+                                <div class="quota-card-header">
+                                    <span class="quota-card-title">📁 ${p.name}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // ===== Hermes =====
+            if (hermes.version) {
+                const gwStatus = hermes.gateway_status === 'running';
+                document.getElementById('hermes-badge').textContent = hermes.version;
+                document.getElementById('hermes-info').innerHTML = `
+                    <div class="overview-card-grid">
+                        <div class="overview-card ${gwStatus ? 'ok' : 'err'}">
+                            <div class="overview-card-icon">${gwStatus ? '⚡' : '⚠️'}</div>
+                            <div class="overview-card-label">Gateway</div>
+                            <div class="overview-card-value ${gwStatus ? 'success' : 'danger'}">${hermes.gateway_status || '未知'}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">🤖</div>
+                            <div class="overview-card-label">模型</div>
+                            <div class="overview-card-value">${hermes.model || '未设置'}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">🐍</div>
+                            <div class="overview-card-label">Python</div>
+                            <div class="overview-card-value">${hermes.python || '未知'}</div>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-icon">💬</div>
+                            <div class="overview-card-label">活动会话</div>
+                            <div class="overview-card-value">${hermes.sessions_active || 0}</div>
+                        </div>
+                    </div>
+                    ${hermes.uptime ? `
+                        <div class="quota-card-stats" style="margin-top: 12px; font-size: 12px;">
+                            <span>PID: ${hermes.uptime.pid}</span>
+                            <span>运行时间: ${hermes.uptime.uptime_str || '未知'}</span>
+                            <span>CPU: ${hermes.uptime.cpu}%</span>
+                            <span>内存: ${hermes.uptime.memory}%</span>
+                        </div>
+                    ` : ''}
+                `;
+            }
+            
+            // Hermes messaging platforms
+            const messaging = hermes.messaging || {};
+            if (Object.keys(messaging).length > 0) {
+                document.getElementById('hermes-messaging').innerHTML = `
+                    <div class="quota-card-grid">
+                        ${Object.entries(messaging).map(([platform, info]) => `
+                            <div class="quota-card">
+                                <div class="quota-card-header">
+                                    <span class="quota-card-title">${info.status === '✓' ? '✓' : '✗'} ${platform}</span>
+                                </div>
+                                <div class="quota-card-stats">
+                                    <span>${info.detail || (info.status === '✓' ? '已配置' : '未配置')}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                document.getElementById('hermes-messaging').innerHTML = '<div class="empty-state">暂无消息平台配置</div>';
+            }
+            
+            // Skills list
+            if (hermes.skills && hermes.skills.length > 0) {
+                const builtin = hermes.skills.filter(s => s.source === 'builtin');
+                const local = hermes.skills.filter(s => s.source === 'local');
+                document.getElementById('hermes-apikeys').innerHTML = `
+                    <div style="margin-bottom: 12px; font-size: 13px;">
+                        <span style="color:#22c55e"> builtin ${builtin.length}</span> | 
+                        <span style="color:#3b82f6"> local ${local.length}</span>
+                    </div>
+                    <div class="skill-tag-grid">
+                        ${hermes.skills.map(s => {
+                            const title = s.zh_description || s.description || s.category || '无分类';
+                            return `<span class="skill-tag ${s.source === 'local' ? 'skill-tag-local' : ''}" 
+                                  title="${title}" data-desc="${s.zh_description || s.description || ''}" data-cat="${s.category || ''}">${s.name}</span>`;
+                        }).join('')}
+                    </div>
+                `;
+                
+                // Add hover tooltip for skills with descriptions
+                document.querySelectorAll('#hermes-apikeys .skill-tag[data-desc]').forEach(tag => {
+                    tag.addEventListener('mouseenter', function(e) {
+                        const desc = this.getAttribute('data-desc');
+                        if (desc) {
+                            showSkillTooltip(this, desc);
+                        }
+                    });
+                    tag.addEventListener('mouseleave', function(e) {
+                        hideSkillTooltip();
+                    });
+                });
+            } else {
+                document.getElementById('hermes-apikeys').innerHTML = '<div class="empty-state">暂无技能</div>';
+            }
+        }
+        
+        let skillTooltip = null;
+        function showSkillTooltip(el, text) {
+            hideSkillTooltip();
+            const rect = el.getBoundingClientRect();
+            const tooltip = document.createElement('div');
+            tooltip.className = 'skill-tooltip';
+            tooltip.textContent = text;
+            tooltip.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.bottom + 5}px;z-index:1000;background:#1e293b;color:#e2e8f0;padding:8px 12px;border-radius:6px;font-size:12px;max-width:300px;box-shadow:0 4px 12px rgba(0,0,0,0.3);line-height:1.4;pointer-events:none;`;
+            document.body.appendChild(tooltip);
+            skillTooltip = tooltip;
+        }
+        function hideSkillTooltip() {
+            if (skillTooltip) {
+                skillTooltip.remove();
+                skillTooltip = null;
+            }
+        }
+        
+        function setStat(id, value, colorClass = '') {
+            const el = document.getElementById(id);
+            if (el) {
+                el.textContent = value;
+                el.className = 'stat-value ' + (colorClass || '');
+            }
+        }
+        
+        // Initial load
+        document.addEventListener('DOMContentLoaded', refresh);
+
+        // Auto refresh every 60s (skip if tab not visible)
+        setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                refresh();
+            }
+        }, 60000);
+    </script>
+</body>
+</html>

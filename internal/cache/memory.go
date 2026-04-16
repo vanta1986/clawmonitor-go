@@ -11,6 +11,7 @@ type MemoryCache struct {
 	expires   map[string]time.Time
 	mu        sync.RWMutex
 	defaultTTL time.Duration
+	stopCh    chan struct{}
 }
 
 // New 创建新缓存
@@ -19,10 +20,16 @@ func New(defaultTTL time.Duration) *MemoryCache {
 		data:      make(map[string]interface{}),
 		expires:   make(map[string]time.Time),
 		defaultTTL: defaultTTL,
+		stopCh:    make(chan struct{}),
 	}
 	// 启动过期清理
 	go c.cleanup()
 	return c
+}
+
+// Stop 停止清理goroutine
+func (c *MemoryCache) Stop() {
+	close(c.stopCh)
 }
 
 // Get 获取缓存
@@ -75,15 +82,21 @@ func (c *MemoryCache) Clear() {
 // cleanup 定期清理过期项
 func (c *MemoryCache) cleanup() {
 	ticker := time.NewTicker(time.Minute)
-	for range ticker.C {
-		c.mu.Lock()
-		now := time.Now()
-		for key, exp := range c.expires {
-			if now.After(exp) {
-				delete(c.data, key)
-				delete(c.expires, key)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			c.mu.Lock()
+			now := time.Now()
+			for key, exp := range c.expires {
+				if now.After(exp) {
+					delete(c.data, key)
+					delete(c.expires, key)
+				}
 			}
+			c.mu.Unlock()
+		case <-c.stopCh:
+			return
 		}
-		c.mu.Unlock()
 	}
 }

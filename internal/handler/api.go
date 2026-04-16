@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"log"
 	"net/http"
 	"time"
 
@@ -10,6 +13,9 @@ import (
 	"clawmonitor/internal/collector"
 	"clawmonitor/internal/storage"
 )
+
+//go:embed web/index.html
+var webUI embed.FS
 
 // Server API 服务
 type Server struct {
@@ -28,6 +34,8 @@ func NewServer(port int) *Server {
 	// 尝试初始化存储
 	if db, err := storage.New(); err == nil {
 		s.storage = db
+	} else {
+		log.Printf("storage init failed: %v (history queries will return error)", err)
 	}
 
 	return s
@@ -36,6 +44,10 @@ func NewServer(port int) *Server {
 // Run 启动服务器
 func (s *Server) Run() error {
 	mux := http.NewServeMux()
+
+	// 静态文件
+	staticFS, _ := fs.Sub(webUI, "web")
+	mux.Handle("/", http.FileServer(http.FS(staticFS)))
 
 	// API 路由
 	mux.HandleFunc("/api/health", s.handleHealth)
@@ -73,22 +85,114 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("X-Cache", "miss")
 
-	// 采集数据
-	system, err := collector.CollectSystem()
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
+	// 并行采集所有数据源，5秒超时，graceful degradation
+	type result struct {
+		name     string
+		system   *collector.SystemMetrics
+		openclaw *collector.OpenClawMetrics
+		external *collector.ExternalMetrics
+		minimax  *collector.MiniMaxMetrics
+		err      error
 	}
 
-	openclaw, err := collector.CollectOpenClaw()
-	if err != nil {
-		http.Error(w, err.Error(), 500)
+	resultCh := make(chan result, 4)
+	done := make(chan struct{})
+
+	// 启动4个goroutine并行采集
+	go func() {
+		m, err := collector.CollectSystem()
+		resultCh <- result{name: "system", system: m, err: err}
+	}()
+	go func() {
+		m, err := collector.CollectOpenClaw()
+		resultCh <- result{name: "openclaw", openclaw: m, err: err}
+	}()
+	go func() {
+		m, err := collector.CollectExternal()
+		resultCh <- result{name: "external", external: m, err: err}
+	}()
+	go func() {
+		m, err := collector.CollectMiniMax()
+		resultCh <- result{name: "minimax", minimax: m, err: err}
+	}()
+
+	var results []result
+	collecting := true
+	for collecting {
+		select {
+		case res := <-resultCh:
+			results = append(results, res)
+			if len(results) == 4 {
+				close(done)
+				collecting = false
+			}
+		case <-done:
+			collecting = false
+		case <-time.After(5 * time.Second):
+			// 超时：所有未返回的结果视为失败
+			close(done)
+			collecting = false
+		}
+	}
+
+	// 如果在超时前只收到部分结果，将未完成的视为失败
+	seen := make(map[string]bool)
+	for _, res := range results {
+		seen[res.name] = true
+	}
+	for _, name := range []string{"system", "openclaw", "external", "minimax"} {
+		if !seen[name] {
+			results = append(results, result{name: name, err: fmt.Errorf("timeout")})
+		}
+	}
+
+	// 汇总结果，空结构保证响应仍含key
+	system := &collector.SystemMetrics{}
+	openclaw := &collector.OpenClawMetrics{}
+	external := &collector.ExternalMetrics{}
+	minimax := &collector.MiniMaxMetrics{}
+	failCount := 0
+
+	for _, res := range results {
+		switch res.name {
+		case "system":
+			if res.err == nil {
+				system = res.system
+			} else {
+				failCount++
+			}
+		case "openclaw":
+			if res.err == nil {
+				openclaw = res.openclaw
+			} else {
+				failCount++
+			}
+		case "external":
+			if res.err == nil {
+				external = res.external
+			} else {
+				external = &collector.ExternalMetrics{}
+			}
+		case "minimax":
+			if res.err == nil {
+				minimax = res.minimax
+			} else {
+				minimax = &collector.MiniMaxMetrics{}
+			}
+		}
+	}
+
+	// 只有全部失败才返回500
+	if failCount == 4 {
+		http.Error(w, "internal server error", 500)
 		return
 	}
 
 	data := map[string]interface{}{
 		"system":   system,
 		"openclaw": openclaw,
+		"external": external,
+		"minimax":  minimax,
 	}
 
 	// 存入缓存
@@ -111,7 +215,7 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 
 	system, err := collector.CollectSystem()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, "internal server error", 500)
 		return
 	}
 
@@ -127,7 +231,7 @@ func (s *Server) handleOpenClaw(w http.ResponseWriter, r *http.Request) {
 
 	openclaw, err := collector.CollectOpenClaw()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, "internal server error", 500)
 		return
 	}
 
@@ -143,7 +247,7 @@ func (s *Server) handleMiniMax(w http.ResponseWriter, r *http.Request) {
 
 	minimax, err := collector.CollectMiniMax()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, "internal server error", 500)
 		return
 	}
 
@@ -165,7 +269,7 @@ func (s *Server) handleExternal(w http.ResponseWriter, r *http.Request) {
 
 	external, err := collector.CollectExternal()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, "internal server error", 500)
 		return
 	}
 
@@ -190,7 +294,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 
 	history, err := s.storage.GetSystemHistory(hours, limit)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, "internal server error", 500)
 		return
 	}
 
