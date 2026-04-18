@@ -139,14 +139,18 @@ func getHermesSkills() []HermesSkill {
 		// Skip header and separator lines
 		// Header uses ┃ (0x2503), data uses │ (0x2502), separator uses ━ (0x2500)
 		if strings.HasPrefix(line, "┃") || strings.HasPrefix(line, "┏") ||
-		   strings.HasPrefix(line, "│") || strings.HasPrefix(line, " ") == false ||
-		   strings.Contains(line, "Name") || strings.Contains(line, "━━━") ||
-		   strings.HasPrefix(line, "┡") {
+		   strings.HasPrefix(line, "┡") ||
+		   strings.Contains(line, "━━━") ||
+		   strings.TrimSpace(line) == "" {
+			continue
+		}
+		// Skip lines that don't start with │ (data lines start with │)
+		if !strings.HasPrefix(line, "│") {
 			continue
 		}
 		// Parse: │ name │ category │ source │ trust │
 		parts := strings.Split(line, "│")
-		if len(parts) >= 4 {
+		if len(parts) >= 5 {
 			name := strings.TrimSpace(parts[1])
 			category := strings.TrimSpace(parts[2])
 			source := strings.TrimSpace(parts[3])
