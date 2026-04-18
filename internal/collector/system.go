@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -25,25 +26,41 @@ type SystemMetrics struct {
 }
 
 type CPUInfo struct {
-	UsagePercent float64   `json:"usage_percent"`
-	PerCPU      []float64 `json:"per_cpu"`
+	UsagePercent   float64    `json:"usage_percent"`
+	PerCPU        []float64  `json:"per_cpu"`
+	CountLogical  int        `json:"count_logical"`
+	CountPhysical int        `json:"count_physical"`
+	LoadAvg       LoadAvgInfo `json:"load_avg"`
+}
+
+type LoadAvgInfo struct {
+	Load1  float64 `json:"1min"`
+	Load5  float64 `json:"5min"`
+	Load15 float64 `json:"15min"`
 }
 
 type MemoryInfo struct {
-	Percent float64 `json:"percent"`
-	Total   uint64  `json:"total"`
-	Used    uint64  `json:"used"`
-	Free    uint64  `json:"free"`
+	Percent      float64 `json:"percent"`
+	Total        uint64  `json:"total"`
+	Used         uint64  `json:"used"`
+	Free         uint64  `json:"free"`
+	TotalGB      float64 `json:"total_gb"`
+	UsedGB       float64 `json:"used_gb"`
+	AvailableGB  float64 `json:"available_gb"`
 }
 
 type DiskPart struct {
-	Device  string `json:"device"`
-	Mount   string `json:"mount"`
-	FSType  string `json:"fs_type"`
-	Total   uint64 `json:"total"`
-	Used    uint64 `json:"used"`
-	Free    uint64 `json:"free"`
-	Percent float64 `json:"percent"`
+	Device     string  `json:"device"`
+	Mount      string  `json:"mount"`
+	FSType     string  `json:"fs_type"`
+	Total      uint64  `json:"total"`
+	Used       uint64  `json:"used"`
+	Free       uint64  `json:"free"`
+	Percent    float64 `json:"percent"`
+	TotalGB    float64 `json:"total_gb"`
+	UsedGB     float64 `json:"used_gb"`
+	FreeGB     float64 `json:"free_gb"`
+	Mountpoint string  `json:"mountpoint"`
 }
 
 type NetworkInfo struct {
@@ -68,14 +85,39 @@ func CollectSystem() (*SystemMetrics, error) {
 		metrics.CPU.PerCPU = cpuPerCPU
 	}
 
+	// CPU counts
+	if count, err := cpu.Counts(true); err == nil {
+		metrics.CPU.CountLogical = count
+		metrics.CPU.CountPhysical = count
+	}
+
+	// Load average - read from /proc/loadavg
+	if data, err := os.ReadFile("/proc/loadavg"); err == nil {
+		fields := strings.Fields(string(data))
+		if len(fields) >= 3 {
+			if f1, err := strconv.ParseFloat(fields[0], 64); err == nil {
+				metrics.CPU.LoadAvg.Load1 = f1
+			}
+			if f5, err := strconv.ParseFloat(fields[1], 64); err == nil {
+				metrics.CPU.LoadAvg.Load5 = f5
+			}
+			if f15, err := strconv.ParseFloat(fields[2], 64); err == nil {
+				metrics.CPU.LoadAvg.Load15 = f15
+			}
+		}
+	}
+
 	// Memory
 	memInfo, err := mem.VirtualMemory()
 	if err == nil {
 		metrics.Memory = MemoryInfo{
-			Percent: memInfo.UsedPercent,
-			Total:   memInfo.Total,
-			Used:    memInfo.Used,
-			Free:    memInfo.Free,
+			Percent:     memInfo.UsedPercent,
+			Total:       memInfo.Total,
+			Used:        memInfo.Used,
+			Free:        memInfo.Free,
+			TotalGB:     float64(memInfo.Total) / (1024 * 1024 * 1024),
+			UsedGB:      float64(memInfo.Used) / (1024 * 1024 * 1024),
+			AvailableGB: float64(memInfo.Available) / (1024 * 1024 * 1024),
 		}
 	}
 
@@ -86,13 +128,17 @@ func CollectSystem() (*SystemMetrics, error) {
 			usage, err := disk.Usage(part.Mountpoint)
 			if err == nil {
 				metrics.Disk = append(metrics.Disk, DiskPart{
-					Device:  part.Device,
-					Mount:   part.Mountpoint,
-					FSType:  part.Fstype,
-					Total:   usage.Total,
-					Used:    usage.Used,
-					Free:    usage.Free,
-					Percent: usage.UsedPercent,
+					Device:     part.Device,
+					Mount:      part.Mountpoint,
+					FSType:     part.Fstype,
+					Total:      usage.Total,
+					Used:       usage.Used,
+					Free:       usage.Free,
+					Percent:    usage.UsedPercent,
+					TotalGB:    float64(usage.Total) / (1024 * 1024 * 1024),
+					UsedGB:     float64(usage.Used) / (1024 * 1024 * 1024),
+					FreeGB:     float64(usage.Free) / (1024 * 1024 * 1024),
+					Mountpoint: part.Mountpoint,
 				})
 			}
 		}

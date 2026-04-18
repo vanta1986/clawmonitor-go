@@ -1,7 +1,10 @@
 package collector
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -98,6 +101,11 @@ func getHermesInfo() HermesInfo {
 	info.GatewayStatus = gw.Status
 	info.GatewayPID = gw.PID
 
+	// Uptime for Hermes gateway process
+	if gw.PID > 0 {
+		info.Uptime = getProcessUptime(gw.PID)
+	}
+
 	// Skills
 	info.Skills = getHermesSkills()
 
@@ -125,6 +133,76 @@ func getHermesGateway() GatewayInfo {
 	}
 
 	return gateway
+}
+
+func getProcessUptime(pid int) UptimeInfo {
+	info := UptimeInfo{PID: pid}
+
+	statPath := fmt.Sprintf("/proc/%d/stat", pid)
+	data, err := os.ReadFile(statPath)
+	if err != nil {
+		info.Error = err.Error()
+		return info
+	}
+
+	// Parse starttime (field 20, index 19)
+	rightParen := strings.LastIndex(string(data), ")")
+	if rightParen == -1 {
+		info.Error = "cannot find process name"
+		return info
+	}
+	afterParen := strings.TrimLeft(string(data)[rightParen+2:], " ")
+	fields := strings.Fields(afterParen)
+	if len(fields) < 20 {
+		info.Error = "invalid stat format"
+		return info
+	}
+
+	startTicks, err := strconv.ParseInt(fields[19], 10, 64)
+	if err != nil {
+		info.Error = err.Error()
+		return info
+	}
+
+	// Read btime
+	btimeData, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		info.Error = err.Error()
+		return info
+	}
+	re := regexp.MustCompile(`btime\s+(\d+)`)
+	matches := re.FindStringSubmatch(string(btimeData))
+	if len(matches) < 2 {
+		info.Error = "btime not found"
+		return info
+	}
+	btime, _ := strconv.ParseInt(matches[1], 10, 64)
+
+	clkTck := float64(getClkTck())
+	uptimeSecs := float64(btime) + float64(startTicks)/clkTck - float64(time.Now().Unix())
+	if uptimeSecs < 0 {
+		uptimeSecs = float64(startTicks) / clkTck
+	}
+
+	info.UptimeSeconds = int64(uptimeSecs)
+	info.UptimeStr = formatUptime(info.UptimeSeconds)
+	return info
+}
+
+func getClkTck() int64 {
+	return 100
+}
+
+func formatUptime(seconds int64) string {
+	days := seconds / 86400
+	hours := (seconds % 86400) / 3600
+	mins := (seconds % 3600) / 60
+	if days > 0 {
+		return fmt.Sprintf("%d天 %d小时", days, hours)
+	} else if hours > 0 {
+		return fmt.Sprintf("%d小时 %d分钟", hours, mins)
+	}
+	return fmt.Sprintf("%d分钟", mins)
 }
 
 func getHermesSkills() []HermesSkill {

@@ -59,9 +59,11 @@ type ConfigInfo struct {
 }
 
 type ModelInfo struct {
-	Name   string `json:"name"`
-	ID     string `json:"id"`
-	Provider string `json:"provider"`
+	Name          string `json:"name"`
+	ID            string `json:"id"`
+	Provider      string `json:"provider"`
+	Reasoning     bool   `json:"reasoning"`
+	ContextWindow int    `json:"context_window"`
 }
 
 type AgentInfo struct {
@@ -148,86 +150,13 @@ func getGatewayStatus() GatewayStatus {
 		pidStr := strings.TrimSpace(string(output))
 		if pid, err := strconv.Atoi(pidStr); err == nil {
 			status.PID = pid
-			status.UptimeSeconds, status.UptimeStr = getProcessUptime(pid)
+			uptime := getProcessUptime(pid); status.UptimeSeconds = uptime.UptimeSeconds; status.UptimeStr = uptime.UptimeStr
 		}
 	}
 
 	return status
 }
 
-func getProcessUptime(pid int) (int64, string) {
-	statPath := fmt.Sprintf("/proc/%d/stat", pid)
-	data, err := os.ReadFile(statPath)
-	if err != nil {
-		return 0, ""
-	}
-
-	// 解析 starttime (field 20, index 19)
-	parts := strings.Split(string(data), " ")
-	if len(parts) < 20 {
-		return 0, ""
-	}
-
-	// 找到右括号后的部分
-	rightParen := strings.LastIndex(string(data), ")")
-	if rightParen == -1 {
-		return 0, ""
-	}
-	afterParen := strings.TrimLeft(string(data)[rightParen+2:], " ")
-	fields := strings.Fields(afterParen)
-	if len(fields) < 20 {
-		return 0, ""
-	}
-
-	startTicks, err := strconv.ParseInt(fields[19], 10, 64)
-	if err != nil {
-		return 0, ""
-	}
-
-	// 读取 btime
-	btime, err := readBtime()
-	if err != nil {
-		return 0, ""
-	}
-
-	clkTck := float64(getClkTck())
-	uptimeSecs := float64(btime) + float64(startTicks)/clkTck - float64(time.Now().Unix())
-	if uptimeSecs < 0 {
-		uptimeSecs = float64(startTicks) / clkTck
-	}
-
-	return int64(uptimeSecs), formatUptime(int64(uptimeSecs))
-}
-
-func readBtime() (int64, error) {
-	data, err := os.ReadFile("/proc/stat")
-	if err != nil {
-		return 0, err
-	}
-	re := regexp.MustCompile(`btime\s+(\d+)`)
-	matches := re.FindStringSubmatch(string(data))
-	if len(matches) < 2 {
-		return 0, fmt.Errorf("btime not found")
-	}
-	return strconv.ParseInt(matches[1], 10, 64)
-}
-
-func getClkTck() int64 {
-	// 通常是 100
-	return 100
-}
-
-func formatUptime(seconds int64) string {
-	days := seconds / 86400
-	hours := (seconds % 86400) / 3600
-	mins := (seconds % 3600) / 60
-	if days > 0 {
-		return fmt.Sprintf("%d天 %d小时", days, hours)
-	} else if hours > 0 {
-		return fmt.Sprintf("%d小时 %d分钟", hours, mins)
-	}
-	return fmt.Sprintf("%d分钟", mins)
-}
 
 func getRuntimeInfo() RuntimeInfo {
 	info := RuntimeInfo{
@@ -283,19 +212,27 @@ func getConfig() ConfigInfo {
 
 	// 提取 agents
 	if agents, ok := cfg["agents"].(map[string]interface{}); ok {
-		config.AgentsCount = len(agents)
-		for name, agent := range agents {
-			agentInfo := AgentInfo{Name: name}
-			if agentMap, ok := agent.(map[string]interface{}); ok {
-				if model, ok := agentMap["model"]; ok {
-					if modelMap, ok := model.(map[string]interface{}); ok {
-						if primary, ok := modelMap["primary"]; ok {
-							agentInfo.Model = fmt.Sprintf("%v", primary)
-						}
+		// agents.map has keys: defaults, list, etc.
+		// list is an array of actual agent definitions
+		if agentList, ok := agents["list"].([]interface{}); ok {
+			config.AgentsCount = len(agentList)
+			for _, item := range agentList {
+				if agentMap, ok := item.(map[string]interface{}); ok {
+					agentInfo := AgentInfo{}
+					if id, ok := agentMap["id"].(string); ok {
+						agentInfo.Name = id
 					}
+					if model, ok := agentMap["model"].(string); ok {
+						agentInfo.Model = model
+					}
+					config.Agents = append(config.Agents, agentInfo)
 				}
 			}
-			config.Agents = append(config.Agents, agentInfo)
+		}
+		// Also handle defaults for any agent-level settings
+		if defaults, ok := agents["defaults"].(map[string]interface{}); ok {
+			// Could extract default model here if needed
+			_ = defaults
 		}
 	}
 
@@ -315,6 +252,12 @@ func getConfig() ConfigInfo {
 								if id, ok := modelMap["id"].(string); ok {
 									modelInfo.ID = id
 									modelInfo.Name = id
+								}
+								if reasoning, ok := modelMap["reasoning"].(bool); ok {
+									modelInfo.Reasoning = reasoning
+								}
+								if contextWindow, ok := modelMap["context_window"].(int); ok {
+									modelInfo.ContextWindow = contextWindow
 								}
 								config.Models = append(config.Models, modelInfo)
 							}
