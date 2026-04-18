@@ -71,7 +71,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"name":    "ClawMonitor",
-		"version": "v2.6",
+		"version": "v2.7",
 	})
 }
 
