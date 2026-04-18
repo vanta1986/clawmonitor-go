@@ -94,8 +94,8 @@ type SessionsInfo struct {
 }
 
 const GATEWAY_PORT = 18789
-const OPENCLAW_CONFIG_PATH = "~/.openclaw/openclaw.json"
-const OPENCLAW_WORKSPACE = "~/.openclaw/workspace"
+const OPENCLAW_CONFIG_PATH = "$HOME/.openclaw/openclaw.json"
+const OPENCLAW_WORKSPACE = "$HOME/.openclaw/workspace"
 
 // CollectOpenClaw 采集 OpenClaw 状态
 func CollectOpenClaw() (*OpenClawMetrics, error) {
@@ -333,8 +333,8 @@ func getSkills() SkillsInfo {
 	info := SkillsInfo{}
 
 	skillDirs := []string{
-		os.ExpandEnv("~/.openclaw/workspace/skills"),
-		os.ExpandEnv("~/.npm-global/lib/node_modules/openclaw/skills"),
+		os.ExpandEnv("$HOME/.openclaw/workspace/skills"),
+		os.ExpandEnv("$HOME/.npm-global/lib/node_modules/openclaw/skills"),
 	}
 
 	for _, dir := range skillDirs {
@@ -374,7 +374,7 @@ func getSkills() SkillsInfo {
 func getExtensions() ExtensionsInfo {
 	info := ExtensionsInfo{}
 
-	extDir := os.ExpandEnv("~/.openclaw/extensions")
+	extDir := os.ExpandEnv("$HOME/.openclaw/extensions")
 	entries, err := os.ReadDir(extDir)
 	if err != nil {
 		return info

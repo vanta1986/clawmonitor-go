@@ -15,15 +15,24 @@ type ExternalMetrics struct {
 }
 
 type HermesInfo struct {
-	Version        string      `json:"version"`
-	Python         string      `json:"python"`
-	Project        string      `json:"project"`
-	Model          string      `json:"model"`
-	Provider       string      `json:"provider"`
-	GatewayStatus  string      `json:"gateway_status"`
-	GatewayPID     int         `json:"gateway_pid,omitempty"`
-	Gateway        GatewayInfo `json:"gateway"`
-	Uptime         UptimeInfo  `json:"uptime"`
+	Version          string            `json:"version"`
+	Python           string            `json:"python"`
+	Project          string            `json:"project"`
+	Model            string            `json:"model"`
+	Provider         string            `json:"provider"`
+	GatewayStatus    string            `json:"gateway_status"`
+	GatewayPID       int               `json:"gateway_pid,omitempty"`
+	Gateway          GatewayInfo       `json:"gateway"`
+	Uptime           UptimeInfo        `json:"uptime"`
+	Skills           []HermesSkill     `json:"skills"`
+	Messaging        map[string]string `json:"messaging"`
+}
+
+type HermesSkill struct {
+	Name     string `json:"name"`
+	Category string `json:"category"`
+	Source   string `json:"source"`
+	Trust    string `json:"trust"`
 }
 
 type GatewayInfo struct {
@@ -89,6 +98,12 @@ func getHermesInfo() HermesInfo {
 	info.GatewayStatus = gw.Status
 	info.GatewayPID = gw.PID
 
+	// Skills
+	info.Skills = getHermesSkills()
+
+	// Messaging platforms
+	info.Messaging = getHermesMessaging(result.Output)
+
 	return info
 }
 
@@ -110,6 +125,69 @@ func getHermesGateway() GatewayInfo {
 	}
 
 	return gateway
+}
+
+func getHermesSkills() []HermesSkill {
+	var skills []HermesSkill
+	result := runCommand("hermes", "skills", "list")
+	if result.Error != nil || result.Output == "" {
+		return skills
+	}
+
+	lines := strings.Split(result.Output, "\n")
+	for _, line := range lines {
+		// Skip header and separator lines
+		if strings.HasPrefix(line, "┃") || strings.HasPrefix(line, "┏") ||
+		   strings.HasPrefix(line, "│") || strings.HasPrefix(line, " ") == false ||
+		   strings.Contains(line, "Name") || strings.Contains(line, "━━━") {
+			continue
+		}
+		// Parse: ┃ name ┃ category ┃ source ┃ trust ┃
+		parts := strings.Split(line, "┃")
+		if len(parts) >= 4 {
+			name := strings.TrimSpace(parts[1])
+			category := strings.TrimSpace(parts[2])
+			source := strings.TrimSpace(parts[3])
+			trust := strings.TrimSpace(parts[4])
+			if name != "" && name != "Name" {
+				skills = append(skills, HermesSkill{
+					Name:     name,
+					Category: category,
+					Source:   source,
+					Trust:    trust,
+				})
+			}
+		}
+	}
+	return skills
+}
+
+func getHermesMessaging(statusOutput string) map[string]string {
+	messaging := make(map[string]string)
+	lines := strings.Split(statusOutput, "\n")
+	inMessagingSection := false
+	for _, line := range lines {
+		if strings.Contains(line, "Messaging Platforms") {
+			inMessagingSection = true
+			continue
+		}
+		if inMessagingSection {
+			// End of section
+			if strings.HasPrefix(line, "◆") || strings.HasPrefix(line, "─") {
+				break
+			}
+			// Parse: "  Telegram      ✓ configured"
+			if strings.Contains(line, "✓") || strings.Contains(line, "✗") {
+				parts := strings.Fields(line)
+				if len(parts) >= 3 {
+					platform := parts[0]
+					status := parts[2]
+					messaging[platform] = status
+				}
+			}
+		}
+	}
+	return messaging
 }
 
 func getClaudeCodeInfo() ClaudeCodeInfo {

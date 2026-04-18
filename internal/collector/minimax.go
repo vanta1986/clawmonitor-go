@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const MINIMAX_STATS_DIR = "~/.openclaw/stats"
+const MINIMAX_STATS_DIR = "$HOME/.openclaw/stats"
 
 // MiniMaxMetrics MiniMax 使用统计
 type MiniMaxMetrics struct {
@@ -293,7 +293,7 @@ func getTokenPlanUsage() []TokenPlanItem {
 
 func getAPIKey() string {
 	// Try MiniMax API key from minimax relevant settings first
-	settingsPath := os.ExpandEnv("~/.openclaw/settings.json")
+	settingsPath := os.ExpandEnv("$HOME/.openclaw/settings.json")
 	data, err := os.ReadFile(settingsPath)
 	if err == nil {
 		var settings struct {
